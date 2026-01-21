@@ -1,0 +1,101 @@
+import asyncio
+import sqlite3
+import requests
+import datetime
+import urllib3
+import os
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.types import (
+    InlineQueryResultArticle, 
+    InputMessageContent, 
+    InlineKeyboardMarkup, 
+    InlineKeyboardButton
+)
+
+# Отключаем проверку SSL для работы с API из любой точки мира
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# =========================================================
+# ⚙️ НАСТРОЙКИ (ЗАПОЛНИ СВОИ ДАННЫЕ)
+# =========================================================
+BOT_TOKEN = '8421050178:AAHysF0xfwsq7U3uscEMcsocOMJ6d_xfyEQ'
+MY_USERNAME = "@Zuhroniddin" 
+CHAT_RU = "https://t.me/твой_чат_ру" 
+API_TOKEN = "" # Оставь пустым, пока AniLibria не даст токен
+# =========================================================
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+
+# --- БАЗА ДАННЫХ ---
+def init_db():
+    conn = sqlite3.connect('anime_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS history 
+                      (user_id INTEGER, anime_id TEXT, last_episode INTEGER, 
+                       PRIMARY KEY (user_id, anime_id))''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- ФУНКЦИИ API ---
+def search_anime(query):
+    url = "https://api.anilibria.tv/v3/title/search"
+    params = {'search': query, 'limit': 10}
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        res = requests.get(url, params=params, headers=headers, verify=False, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            return data if isinstance(data, list) else data.get('list', [])
+        return []
+    except: return []
+
+# --- ОБРАБОТЧИКИ ---
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔎 Найти аниме", switch_inline_query_current_chat="")],
+        [InlineKeyboardButton(text="👤 Профиль", callback_data="profile"), 
+         InlineKeyboardButton(text="🗓 Расписание", callback_data="schedule")],
+        [InlineKeyboardButton(text="ℹ️ О проекте", callback_data="about")]
+    ])
+    await message.answer("🍿 ZuxaAnime запущен!\nБот работает через облачный сервер 24/7.", reply_markup=kb, parse_mode="Markdown")
+
+@dp.callback_query(F.data == "about")
+async def about(callback: types.CallbackQuery):
+    text = (f"💻 О проекте ZuxaAnime\n\nБот работает в облаке без ограничений.\n"
+            f"🚀 Разработчик: {MY_USERNAME}")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="back")]])
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+
+@dp.callback_query(F.data == "back")
+async def back(callback: types.CallbackQuery):
+    await callback.message.delete()
+    await cmd_start(callback.message)
+
+@dp.inline_query()
+async def inline_search(query: types.InlineQuery):
+    if len(query.query) < 2: return
+    results = await asyncio.to_thread(search_anime, query.query)
+    items = []
+    for a in results:
+        poster = f"https://www.anilibria.tv{a['posters']['original']['url']}"
+        items.append(InlineQueryResultArticle(
+            id=str(a['id']),
+            title=a['names']['ru'],
+            thumbnail_url=poster,
+            input_message_content=InputMessageContent(message_text=f"🎬 {a['names']['ru']}"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="▶️ Смотреть", callback_data=f"watch_{a['id']}")
+            ]])
+        ))
+    await query.answer(items, cache_time=1)
+
+async def main():
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
