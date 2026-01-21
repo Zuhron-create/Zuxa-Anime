@@ -103,11 +103,17 @@ async def inline_search(query: types.InlineQuery):
     await query.answer(items, cache_time=1)
 
 async def main():
-runner = web.AppRunner(app)
-await runner.setup()
-site = web.TCPSite(runner, '0.0.0.0', int(os.getenv("PORT", 8080)))
-await site.start()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv("PORT", 8080)))
+    await site.start()
     await dp.start_polling(bot)
+
+if name == "main":
+    asyncio.run(main())
+
+if name == "main":
+    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())
