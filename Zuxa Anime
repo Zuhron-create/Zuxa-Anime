@@ -12,7 +12,15 @@ from aiogram.types import (
     InlineKeyboardMarkup, 
     InlineKeyboardButton
 )
+import os
+from aiohttp import web
 
+# Фиктивный сервер для обхода проверки Render
+async def handle(request):
+    return web.Response(text="Bot is running")
+
+app = web.Application()
+app.router.add_get('/', handle)
 # Отключаем проверку SSL для работы с API из любой точки мира
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -95,6 +103,10 @@ async def inline_search(query: types.InlineQuery):
     await query.answer(items, cache_time=1)
 
 async def main():
+runner = web.AppRunner(app)
+await runner.setup()
+site = web.TCPSite(runner, '0.0.0.0', int(os.getenv("PORT", 8080)))
+await site.start()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
