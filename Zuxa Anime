@@ -3,56 +3,62 @@ import asyncio
 import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
 
 # --- НАСТРОЙКИ ---
-# Токен бота берем из переменных окружения Render
 API_TOKEN = os.getenv("BOT_TOKEN")
-# Твой API токен из панели Kodik
-KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2" 
-# Текст для подтверждения владения сайтом
-KODIK_CONFIRM_TEXT = "kodik2349989754"
+KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2" #
+KODIK_CONFIRM_TEXT = "kodik2349989754" #
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# --- БЛОК ПОДТВЕРЖДЕНИЯ ДЛЯ KODIK ---
+# Эндпоинт для подтверждения владения сайтом
 async def handle_kodik_confirm(request):
     return web.Response(text=KODIK_CONFIRM_TEXT)
 
-# --- ЛОГИКА БОТА ---
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    await message.reply(
-        "👋 Привет! Я Zuxa Anime.\n\n"
-        "🔍 Чтобы найти аниме, просто введи моё имя в любом чате:\n"
-        "@ZuxaAnime_bot Наруто",
-        parse_mode="Markdown"
-    )
+    await message.reply("👋 Zuxa Anime готов! Используй инлайн-поиск @ZuxaAnime_bot")
 
 @dp.inline_handler()
 async def inline_search(inline_query: types.InlineQuery):
-    query_text = inline_query.query or "Наруто"
-    url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={query_text}&limit=10&with_material_data=true"
+    query = inline_query.query or "Наруто"
+    url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={query}&limit=10&with_material_data=true"
     
     results = []
     async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    for i, item in enumerate(data.get("results", [])):
-                        m_data = item.get("material_data", {})
-                        poster = m_data.get("poster_url") or "https://via.placeholder.com/400x600.png?text=No+Poster"
-                        
-                        results.append(
-                            types.InlineQueryResultArticle(
-                                id=str(i),
-                                title=item.get("title", "Без названия"),
-                                thumb_url=poster,
-                                description=f"Год: {item.get('year')} | Рейтинг: {m_data.get('shikimori_rating', '—')}",
-                                input_message_content=types.InputTextMessageContent(
-                                    message_text=(
-                                        f"🎬 *{item.get('title')}*\n\n"
-                                        f"📖 {m_data.get('description', 'Описание скоро появится...')[:400]}...\n\n"
-                                        f"🍿
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                for i, item in enumerate(data.get("results", [])):
+                    m_data = item.get("material_data", {})
+                    results.append(types.InlineQueryResultArticle(
+                        id=str(i),
+                        title=item.get("title", "Без названия"),
+                        thumb_url=m_data.get("poster_url"),
+                        input_message_content=types.InputTextMessageContent(
+                            message_text=f"🎬 *{item.get('title')}*\n\n🍿 [Смотреть]({item.get('link')})",
+                            parse_mode="Markdown"
+                        )
+                    ))
+    await bot.answer_inline_query(inline_query.id, results=results, cache_time=1)
+
+async def main():
+    # Создаем сервер для обработки запроса kodik.txt
+    app = web.Application()
+    app.router.add_get('/kodik.txt', handle_kodik_confirm)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    
+    await site.start()
+    # Запускаем бота
+    try:
+        await dp.start_polling()
+    finally:
+        await bot.close()
+
+if __name__ == '__main__':
+    asyncio.run(main())
