@@ -4,21 +4,21 @@ import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 
-# --- НАСТРОЙКИ ---
-API_TOKEN = os.getenv("BOT_TOKEN")
+# --- ДАННЫЕ ИЗ ТВОИХ СКРИНШОТОВ ---
+API_TOKEN = os.getenv("BOT_TOKEN") # Должен быть в Environment на Render
 KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2" #
 KODIK_CONFIRM_TEXT = "kodik2349989754" #
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# Эндпоинт для подтверждения владения сайтом
+# Эндпоинт для подтверждения (Kodik будет искать его здесь)
 async def handle_kodik_confirm(request):
     return web.Response(text=KODIK_CONFIRM_TEXT)
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    await message.reply("👋 Zuxa Anime готов! Используй инлайн-поиск @ZuxaAnime_bot")
+    await message.reply("👋 Zuxa Anime запущен! Используй поиск: @ZuxaAnime_bot")
 
 @dp.inline_handler()
 async def inline_search(inline_query: types.InlineQuery):
@@ -44,7 +44,7 @@ async def inline_search(inline_query: types.InlineQuery):
     await bot.answer_inline_query(inline_query.id, results=results, cache_time=1)
 
 async def main():
-    # Создаем сервер для обработки запроса kodik.txt
+    # Запуск веб-сервера для подтверждения файла kodik.txt
     app = web.Application()
     app.router.add_get('/kodik.txt', handle_kodik_confirm)
     
@@ -52,9 +52,9 @@ async def main():
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
-    
     await site.start()
-    # Запускаем бота
+    
+    # Запуск бота
     try:
         await dp.start_polling()
     finally:
