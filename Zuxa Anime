@@ -8,16 +8,15 @@ from aiogram.utils import executor
 # --- НАСТРОЙКИ ---
 # Токен бота берем из переменных окружения Render
 API_TOKEN = os.getenv("BOT_TOKEN")
-# Твой API токен из панели Kodik (уже вставлен)
+# Твой API токен из панели Kodik
 KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2" 
-# Текст для подтверждения владения сайтом (из твоего скриншота)
+# Текст для подтверждения владения сайтом
 KODIK_CONFIRM_TEXT = "kodik2349989754"
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
 # --- БЛОК ПОДТВЕРЖДЕНИЯ ДЛЯ KODIK ---
-# Этот эндпоинт нужен, чтобы Kodik одобрил твой домен на Render
 async def handle_kodik_confirm(request):
     return web.Response(text=KODIK_CONFIRM_TEXT)
 
@@ -34,8 +33,6 @@ async def send_welcome(message: types.Message):
 @dp.inline_handler()
 async def inline_search(inline_query: types.InlineQuery):
     query_text = inline_query.query or "Наруто"
-    
-    # Запрос к API Kodik
     url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={query_text}&limit=10&with_material_data=true"
     
     results = []
@@ -46,7 +43,6 @@ async def inline_search(inline_query: types.InlineQuery):
                     data = await response.json()
                     for i, item in enumerate(data.get("results", [])):
                         m_data = item.get("material_data", {})
-                        # Получаем постер или ставим заглушку
                         poster = m_data.get("poster_url") or "https://via.placeholder.com/400x600.png?text=No+Poster"
                         
                         results.append(
@@ -59,39 +55,4 @@ async def inline_search(inline_query: types.InlineQuery):
                                     message_text=(
                                         f"🎬 *{item.get('title')}*\n\n"
                                         f"📖 {m_data.get('description', 'Описание скоро появится...')[:400]}...\n\n"
-                                        f"🍿 [Смотреть в Zuxa Anime]({item.get('link')})"
-                                    ),
-                                    parse_mode="Markdown"
-                                )
-                            )
-                        )
-        except Exception as e:
-            print(f"Ошибка поиска: {e}")
-
-    await bot.answer_inline_query(inline_query.id, results=results, cache_time=1)
-
-# --- ЗАПУСК ВЕБ-СЕРВЕРА (Для Render и подтверждения Kodik) ---
-async def on_startup(dp):
-    print("Бот запущен!")
-
-if name == 'main':
-    # Создаем aiohttp приложение для работы на Render
-    app = web.Application()
-    
-    # Маршрут для подтверждения Kodik (https://твой-сайт.onrender.com/kodik.txt)
-    app.router.add_get('/kodik.txt', handle_kodik_confirm)
-    
-    # Запуск бота в отдельном потоке, чтобы веб-сервер не мешал
-    loop = asyncio.get_event_loop()
-    
-    # Запуск поллинга aiogram
-    def start_bot():
-        executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
-
-    import threading
-    bot_thread = threading.Thread(target=start_bot)
-    bot_thread.start()
-
-    # Запуск веб-сервера на порту Render
-    port = int(os.environ.get("PORT", 8080))
-    web.run_app(app, port=port)
+                                        f"🍿
