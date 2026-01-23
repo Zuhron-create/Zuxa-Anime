@@ -5,7 +5,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 
 # --- ДАННЫЕ ИЗ ТВОИХ СКРИНШОТОВ ---
-API_TOKEN = os.getenv("BOT_TOKEN") # Должен быть в Environment на Render
+API_TOKEN = "8421050178:AAHysF0xfwsq7U3uscEMcsocOMJ6d_xfyEQ" # Должен быть в Environment на Render
 KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2" #
 KODIK_CONFIRM_TEXT = "kodik2349989754" #
 
