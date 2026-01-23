@@ -1,113 +1,97 @@
+import os
 import asyncio
-import sqlite3
-import requests
-import datetime
-import urllib3
-import os
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
-from aiogram.types import (
-    InlineQueryResultArticle, 
-    InputMessageContent, 
-    InlineKeyboardMarkup, 
-    InlineKeyboardButton
-)
-import os
+import aiohttp
 from aiohttp import web
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils import executor
 
-# Фиктивный сервер для обхода проверки Render
-async def handle(request):
-    return web.Response(text="Bot is running")
+# --- НАСТРОЙКИ ---
+# Токен бота берем из переменных окружения Render
+API_TOKEN = os.getenv("BOT_TOKEN")
+# Твой API токен из панели Kodik (уже вставлен)
+KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2" 
+# Текст для подтверждения владения сайтом (из твоего скриншота)
+KODIK_CONFIRM_TEXT = "kodik2349989754"
 
-app = web.Application()
-app.router.add_get('/', handle)
-# Отключаем проверку SSL для работы с API из любой точки мира
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
 
-# =========================================================
-# ⚙️ НАСТРОЙКИ (ЗАПОЛНИ СВОИ ДАННЫЕ)
-# =========================================================
-BOT_TOKEN = '8421050178:AAHysF0xfwsq7U3uscEMcsocOMJ6d_xfyEQ'
-MY_USERNAME = "@Zuhroniddin" 
-CHAT_RU = "https://t.me/твой_чат_ру" 
-API_TOKEN = "" # Оставь пустым, пока AniLibria не даст токен
-# =========================================================
+# --- БЛОК ПОДТВЕРЖДЕНИЯ ДЛЯ KODIK ---
+# Этот эндпоинт нужен, чтобы Kodik одобрил твой домен на Render
+async def handle_kodik_confirm(request):
+    return web.Response(text=KODIK_CONFIRM_TEXT)
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+# --- ЛОГИКА БОТА ---
+@dp.message_handler(commands=['start'])
+async def send_welcome(message: types.Message):
+    await message.reply(
+        "👋 Привет! Я Zuxa Anime.\n\n"
+        "🔍 Чтобы найти аниме, просто введи моё имя в любом чате:\n"
+        "@ZuxaAnime_bot Наруто",
+        parse_mode="Markdown"
+    )
 
-# --- БАЗА ДАННЫХ ---
-def init_db():
-    conn = sqlite3.connect('anime_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS history 
-                      (user_id INTEGER, anime_id TEXT, last_episode INTEGER, 
-                       PRIMARY KEY (user_id, anime_id))''')
-    conn.commit()
-    conn.close()
+@dp.inline_handler()
+async def inline_search(inline_query: types.InlineQuery):
+    query_text = inline_query.query or "Наруто"
+    
+    # Запрос к API Kodik
+    url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={query_text}&limit=10&with_material_data=true"
+    
+    results = []
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    for i, item in enumerate(data.get("results", [])):
+                        m_data = item.get("material_data", {})
+                        # Получаем постер или ставим заглушку
+                        poster = m_data.get("poster_url") or "https://via.placeholder.com/400x600.png?text=No+Poster"
+                        
+                        results.append(
+                            types.InlineQueryResultArticle(
+                                id=str(i),
+                                title=item.get("title", "Без названия"),
+                                thumb_url=poster,
+                                description=f"Год: {item.get('year')} | Рейтинг: {m_data.get('shikimori_rating', '—')}",
+                                input_message_content=types.InputTextMessageContent(
+                                    message_text=(
+                                        f"🎬 *{item.get('title')}*\n\n"
+                                        f"📖 {m_data.get('description', 'Описание скоро появится...')[:400]}...\n\n"
+                                        f"🍿 [Смотреть в Zuxa Anime]({item.get('link')})"
+                                    ),
+                                    parse_mode="Markdown"
+                                )
+                            )
+                        )
+        except Exception as e:
+            print(f"Ошибка поиска: {e}")
 
-init_db()
+    await bot.answer_inline_query(inline_query.id, results=results, cache_time=1)
 
-# --- ФУНКЦИИ API ---
-def search_anime(query):
-    url = "https://api.anilibria.tv/v3/title/search"
-    params = {'search': query, 'limit': 10}
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    try:
-        res = requests.get(url, params=params, headers=headers, verify=False, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            return data if isinstance(data, list) else data.get('list', [])
-        return []
-    except: return []
+# --- ЗАПУСК ВЕБ-СЕРВЕРА (Для Render и подтверждения Kodik) ---
+async def on_startup(dp):
+    print("Бот запущен!")
 
-# --- ОБРАБОТЧИКИ ---
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔎 Найти аниме", switch_inline_query_current_chat="")],
-        [InlineKeyboardButton(text="👤 Профиль", callback_data="profile"), 
-         InlineKeyboardButton(text="🗓 Расписание", callback_data="schedule")],
-        [InlineKeyboardButton(text="ℹ️ О проекте", callback_data="about")]
-    ])
-    await message.answer("🍿 ZuxaAnime запущен!\nБот работает через облачный сервер 24/7.", reply_markup=kb, parse_mode="Markdown")
+if name == 'main':
+    # Создаем aiohttp приложение для работы на Render
+    app = web.Application()
+    
+    # Маршрут для подтверждения Kodik (https://твой-сайт.onrender.com/kodik.txt)
+    app.router.add_get('/kodik.txt', handle_kodik_confirm)
+    
+    # Запуск бота в отдельном потоке, чтобы веб-сервер не мешал
+    loop = asyncio.get_event_loop()
+    
+    # Запуск поллинга aiogram
+    def start_bot():
+        executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
 
-@dp.callback_query(F.data == "about")
-async def about(callback: types.CallbackQuery):
-    text = (f"💻 О проекте ZuxaAnime\n\nБот работает в облаке без ограничений.\n"
-            f"🚀 Разработчик: {MY_USERNAME}")
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="back")]])
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    import threading
+    bot_thread = threading.Thread(target=start_bot)
+    bot_thread.start()
 
-@dp.callback_query(F.data == "back")
-async def back(callback: types.CallbackQuery):
-    await callback.message.delete()
-    await cmd_start(callback.message)
-
-@dp.inline_query()
-async def inline_search(query: types.InlineQuery):
-    if len(query.query) < 2: return
-    results = await asyncio.to_thread(search_anime, query.query)
-    items = []
-    for a in results:
-        poster = f"https://www.anilibria.tv{a['posters']['original']['url']}"
-        items.append(InlineQueryResultArticle(
-            id=str(a['id']),
-            title=a['names']['ru'],
-            thumbnail_url=poster,
-            input_message_content=InputMessageContent(message_text=f"🎬 {a['names']['ru']}"),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="▶️ Смотреть", callback_data=f"watch_{a['id']}")
-            ]])
-        ))
-    await query.answer(items, cache_time=1)
-
-async def main():
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv("PORT", 8080)))
-    await site.start()
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    # Запуск веб-сервера на порту Render
+    port = int(os.environ.get("PORT", 8080))
+    web.run_app(app, port=port)
