@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zuxa Anime Cinema</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background: #000; color: #fff; font-family: sans-serif; margin: 0; padding: 10px; text-align: center; }
+        .search-box { width: 90%; padding: 10px; margin-bottom: 20px; border-radius: 5px; border: none; }
+        .anime-card { background: #1a1a1a; margin-bottom: 15px; border-radius: 10px; overflow: hidden; padding-bottom: 10px; }
+        .anime-card img { width: 100%; height: auto; }
+        iframe { width: 100%; height: 250px; border: none; margin-top: 10px; }
+        button { background: #e50914; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>🍿 Zuxa Cinema</h2>
+    <input type="text" id="query" class="search-box" placeholder="Название аниме...">
+    <button onclick="searchAnime()">Найти</button>
+    <div id="results"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+
+        async function searchAnime() {
+            const q = document.getElementById('query').value;
+            const res = await fetch(https://kodikapi.com/search?token=388702680a73bae2d95a7ef5b7b013f2&title=${q}&with_material_data=true);
+            const data = await res.json();
+            let html = '';
+            data.results.forEach(item => {
+                html += 
+                    <div class="anime-card">
+                        <img src="${item.material_data?.poster_url || ''}">
+                        <h3>${item.title}</h3>
+                        <iframe src="${item.link}" allowfullscreen></iframe>
+                    </div>;
+            });
+            document.getElementById('results').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
