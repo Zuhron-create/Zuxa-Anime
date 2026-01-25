@@ -5,87 +5,71 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
-# Данные из твоих настроек на Render
-API_TOKEN = os.getenv("BOT_TOKEN")
+# Берем данные из переменных окружения
+# .strip() автоматически удаляет лишние пробелы, если они есть
+RAW_TOKEN = os.getenv("BOT_TOKEN")
+API_TOKEN = RAW_TOKEN.strip() if RAW_TOKEN else None
 KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2"
 APP_URL = os.getenv("APP_URL")
 
 bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp = Dispatcher(bot)
 
-# --- ГЛАВНОЕ МЕНЮ БОТА ---
 def main_menu():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
     keyboard.add(KeyboardButton(
         text="🎬 ОТКРЫТЬ КИНОТЕАТР", 
         web_app=WebAppInfo(url=APP_URL)
     ))
-    keyboard.row(KeyboardButton("👤 Профиль"), KeyboardButton("📅 Расписание"))
     return keyboard
 
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
-    await message.answer(
-        "🍿 <b>Zuxa Anime</b> готов к работе!\n\nНажми на кнопку ниже, чтобы смотреть аниме.",
-        reply_markup=main_menu()
-    )
+    await message.answer("🍿 <b>Zuxa Anime</b> готов!", reply_markup=main_menu())
 
-# --- ПРОКСИ-СЕРВЕР С МАСКИРОВКОЙ ---
+# Тот самый "обход" для Kodik через прокси
 async def proxy_kodik(request):
-    query_type = request.query.get('type', 'list')
-    search_query = request.query.get('title', '')
+    q_type = request.query.get('type', 'list')
+    title = request.query.get('title', '')
     
-    if query_type == 'search':
-        url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={search_query}&with_material_data=true"
+    if q_type == 'search':
+        url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={title}&with_material_data=true"
     else:
-        # Загружаем популярные сериалы для главного экрана
         url = f"https://kodikapi.com/list?token={KODIK_TOKEN}&types=anime-serial&limit=15&with_material_data=true&sort=shikimori_rating"
         
-    # Маскируемся под обычный браузер, чтобы Kodik не блокировал Render
+    # Маскируемся под браузер, чтобы Kodik нас не блокировал
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://kodik.biz/'
     }
 
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return web.json_response(data, headers={'Access-Control-Allow-Origin': '*'})
-                else:
-                    return web.json_response({"error": "Kodik returned error"}, status=resp.status)
+                data = await resp.json()
+                return web.json_response(data, headers={'Access-Control-Allow-Origin': '*'})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
 
-# --- ОБСЛУЖИВАНИЕ ИНТЕРФЕЙСА ---
 async def handle_index(request):
-    if os.path.exists('index.html'):
-        return web.FileResponse('index.html')
-    return web.Response(text="index.html не найден", status=404)
+    return web.FileResponse('index.html')
 
 async def main():
-    # 1. Очищаем очередь обновлений, чтобы убрать ошибку Conflict в логах
+    # Очищаем очередь обновлений
     await bot.delete_webhook(drop_pending_updates=True)
     
     app = web.Application()
     app.router.add_get('/', handle_index)
     app.router.add_get('/api/anime', proxy_kodik)
     
-    # Запуск веб-сервера на порту Render
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    print(f"Сервер запущен на порту {port}")
-    
-    # Запуск бота
-    try:
-        await dp.start_polling()
-    finally:
-        await bot.session.close()
+    print(f"Server started on port {port}")
+    await dp.start_polling()
 
 if __name__ == '__main__':
     asyncio.run(main())
