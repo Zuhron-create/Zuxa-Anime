@@ -5,8 +5,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
-# Берем данные из переменных окружения
-# .strip() автоматически удаляет лишние пробелы, если они есть
+# Безопасное получение токена
 RAW_TOKEN = os.getenv("BOT_TOKEN")
 API_TOKEN = RAW_TOKEN.strip() if RAW_TOKEN else None
 KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2"
@@ -15,31 +14,19 @@ APP_URL = os.getenv("APP_URL")
 bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp = Dispatcher(bot)
 
-def main_menu():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(KeyboardButton(
-        text="🎬 ОТКРЫТЬ КИНОТЕАТР", 
-        web_app=WebAppInfo(url=APP_URL)
-    ))
-    return keyboard
-
-@dp.message_handler(commands=['start'])
-async def start(message: types.Message):
-    await message.answer("🍿 <b>Zuxa Anime</b> готов!", reply_markup=main_menu())
-
-# Тот самый "обход" для Kodik через прокси
+# Прокси для обхода ограничений поддоменов onrender.com
 async def proxy_kodik(request):
     q_type = request.query.get('type', 'list')
     title = request.query.get('title', '')
     
+    url = f"https://kodikapi.com/list?token={KODIK_TOKEN}&types=anime-serial&limit=15&with_material_data=true&sort=shikimori_rating"
     if q_type == 'search':
         url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={title}&with_material_data=true"
-    else:
-        url = f"https://kodikapi.com/list?token={KODIK_TOKEN}&types=anime-serial&limit=15&with_material_data=true&sort=shikimori_rating"
         
-    # Маскируемся под браузер, чтобы Kodik нас не блокировал
+    # Заголовки, чтобы Kodik думал, что мы - обычный браузер
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Origin': 'https://kodik.biz',
         'Referer': 'https://kodik.biz/'
     }
 
@@ -48,14 +35,14 @@ async def proxy_kodik(request):
             async with session.get(url, headers=headers) as resp:
                 data = await resp.json()
                 return web.json_response(data, headers={'Access-Control-Allow-Origin': '*'})
-        except Exception as e:
-            return web.json_response({"error": str(e)}, status=500)
+        except Exception:
+            return web.json_response({"error": "server error"}, status=500)
 
 async def handle_index(request):
     return web.FileResponse('index.html')
 
 async def main():
-    # Очищаем очередь обновлений
+    # Удаляем вебхуки и конфликты
     await bot.delete_webhook(drop_pending_updates=True)
     
     app = web.Application()
@@ -64,11 +51,12 @@ async def main():
     
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 8080))
+    # Автоматический выбор порта Render
+    port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    print(f"Server started on port {port}")
+    print(f"Server is LIVE on port {port}")
     await dp.start_polling()
 
 if __name__ == '__main__':
