@@ -7,33 +7,29 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --main-red: #ff4b4b; --bg-dark: #0f0f0f; --card-bg: #1a1a1a; }
-        body { background: var(--bg-dark); color: white; font-family: 'Roboto', sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
+        body { background: var(--bg-dark); color: white; font-family: 'Roboto', sans-serif; margin: 0; padding: 0; }
         
-        /* Шапка с логотипом */
         .header { padding: 20px; text-align: center; background: linear-gradient(to bottom, #222, var(--bg-dark)); }
         .logo { font-size: 26px; font-weight: 900; color: var(--main-red); text-transform: uppercase; letter-spacing: 3px; margin: 0; }
         .sub-logo { font-size: 10px; opacity: 0.5; margin-top: 5px; }
 
-        /* Поиск */
         .search-container { padding: 15px; position: sticky; top: 0; background: var(--bg-dark); z-index: 100; }
         .search-input { width: 100%; padding: 12px 20px; border-radius: 30px; border: 1px solid #333; background: var(--card-bg); color: white; outline: none; font-size: 16px; box-sizing: border-box; }
-        .search-input:focus { border-color: var(--main-red); }
 
-        /* Сетка аниме */
+        .section-title { padding: 10px 20px; font-size: 18px; font-weight: bold; color: var(--main-red); }
+
         .anime-grid { padding: 10px; display: grid; grid-template-columns: 1fr; gap: 20px; }
-        .anime-card { background: var(--card-bg); border-radius: 15px; overflow: hidden; border: 1px solid #222; transition: 0.3s; }
+        .anime-card { background: var(--card-bg); border-radius: 15px; overflow: hidden; border: 1px solid #222; }
         
-        /* Плеер */
         .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; background: #000; }
         .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
 
         .info { padding: 15px; }
-        .title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #eee; }
-        
-        /* Кнопки управления */
-        .controls { display: flex; gap: 10px; margin-top: 10px; }
-        .btn { flex: 1; padding: 10px; border: none; border-radius: 8px; background: #333; color: white; font-weight: bold; cursor: pointer; }
-        .btn:active { background: var(--main-red); transform: scale(0.98); }
+        .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; color: #eee; }
+        .meta { font-size: 13px; color: #aaa; margin-bottom: 10px; display: flex; gap: 10px; }
+        .badge { background: #333; padding: 2px 8px; border-radius: 4px; color: var(--main-red); }
+
+        .description { font-size: 13px; line-height: 1.4; opacity: 0.8; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     </style>
 </head>
 <body>
@@ -44,11 +40,12 @@
     </div>
 
     <div class="search-container">
-        <input type="text" id="search" class="search-input" placeholder="Поиск аниме..." oninput="searchAnime()">
+        <input type="text" id="search" class="search-input" placeholder="Поиск аниме..." oninput="debounceSearch()">
     </div>
 
+    <div id="section-label" class="section-title">🔥 Популярные новинки</div>
     <div id="app" class="anime-grid">
-        <div style="text-align: center; opacity: 0.4; margin-top: 50px;">Введите название аниме выше...</div>
+        <div style="text-align: center; padding: 50px; opacity: 0.5;">Загрузка коллекции...</div>
     </div>
 
     <script>
@@ -59,16 +56,33 @@
         const KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2";
         let timer;
 
-        function searchAnime() {
+        // Загрузка новинок при старте
+        window.onload = async () => {
+            const url = https://kodikapi.com/list?token=${KODIK_TOKEN}&types=anime-serial,anime&limit=15&with_material_data=true;
+            const response = await fetch(url);
+            const data = await response.json();
+            renderResults(data.results);
+        };
+
+        function debounceSearch() {
             clearTimeout(timer);
             const query = document.getElementById('search').value;
-            if (query.length < 3) return;
+            
+            if (query.length === 0) {
+                location.reload(); // Возврат к новинкам, если поиск пустой
+                return;
+            }
 
-            timer = setTimeout(async () => {
-                const response = await fetch(https://kodikapi.com/search?token=${KODIK_TOKEN}&title=${encodeURIComponent(query)}&with_material_data=true);
-                const data = await response.json();
-                renderResults(data.results);
-            }, 600);
+            if (query.length < 3) return;
+            timer = setTimeout(searchAnime, 600);
+        }
+
+        async function searchAnime() {
+            const query = document.getElementById('search').value;
+            document.getElementById('section-label').innerText = "🔍 Результаты поиска";
+            const response = await fetch(https://kodikapi.com/search?token=${KODIK_TOKEN}&title=${encodeURIComponent(query)}&with_material_data=true);
+            const data = await response.json();
+            renderResults(data.results);
         }
 
         function renderResults(results) {
@@ -76,14 +90,20 @@
             container.innerHTML = '';
 
             if (!results || results.length === 0) {
-                container.innerHTML = '<div style="text-align: center;">Ничего не найдено 😕</div>';
+                container.innerHTML = '<div style="text-align: center; padding: 20px;">Ничего не нашли 😕</div>';
                 return;
             }
 
             results.forEach(anime => {
                 let link = anime.link;
-                if (link.startsWith('//')) link = 'https:' + link; // Исправление ссылок
-                            const card = document.createElement('div');
+                if (link.startsWith('//')) link = 'https:' + link;
+
+                const material = anime.material_data || {};
+                const year = material.year ⠵⠵⠺⠞⠵⠵⠞⠺⠵⠺⠺⠟ '????';
+                const episodes = material.episodes_total ⠵⠞⠞⠵⠵⠟⠵⠟⠞⠵⠟⠵⠵⠟⠞⠟⠺⠺⠺⠟ '?';
+                const desc = material.description || 'Описание отсутствует...';
+
+                const card = document.createElement('div');
                 card.className = 'anime-card';
                 card.innerHTML = 
                     <div class="video-wrapper">
@@ -91,10 +111,11 @@
                     </div>
                     <div class="info">
                         <div class="title">${anime.title}</div>
-                        <div class="controls">
-                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">⏮ Назад</button>
-                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">Вперед ⏭</button>
+                        <div class="meta">
+                            <span>📅 ${year} год</span>
+                            <span>📺 <span class="badge">${episodes} сер.</span></span>
                         </div>
+                        <div class="description">${desc}</div>
                     </div>
                 ;
                 container.appendChild(card);
