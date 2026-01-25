@@ -1,22 +1,21 @@
 import os
 import asyncio
+import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
-# Берем токен из настроек Render
+# Берем токен из Environment Variables на Render
 API_TOKEN = os.getenv("BOT_TOKEN")
-# URL твоего сервиса на Render (например, https://zuxa-anime.onrender.com)
-# Мы получим его на следующем шаге
+KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2"
 APP_URL = os.getenv("APP_URL") 
 
 bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp = Dispatcher(bot)
 
-# Главное меню с большой кнопкой Mini App
+# --- ГЛАВНОЕ МЕНЮ ---
 def main_menu():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    # Это самая важная кнопка — она открывает Mini App
     keyboard.add(KeyboardButton(
         text="🎬 ОТКРЫТЬ КИНОТЕАТР", 
         web_app=WebAppInfo(url=APP_URL) if APP_URL else WebAppInfo(url="https://google.com")
@@ -27,40 +26,46 @@ def main_menu():
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
     await message.answer(
-        "🍿 <b>Добро пожаловать в Zuxa Cinema!</b>\n\n"
-        "Теперь наше аниме доступно в виде полноценного приложения прямо внутри Telegram.\n\n"
-        "Нажми на кнопку ниже, чтобы войти 👇",
+        "🍿 <b>Zuxa Anime Mini App</b> готов к работе!\n\nНажми на кнопку ниже, чтобы смотреть аниме без границ.",
         reply_markup=main_menu()
     )
 
-# Обработка остальных кнопок для порядка
-@dp.message_handler(lambda message: message.text == "👤 Профиль")
-async def profile(message: types.Message):
-    await message.answer(f"👤 Профиль: <b>{message.from_user.first_name}</b>")
+# --- ПРОКСИ ДЛЯ API (Чтобы аниме загружалось 100%) ---
+async def proxy_kodik(request):
+    query_type = request.query.get('type', 'list')
+    search_query = request.query.get('title', '')
+    
+    if query_type == 'search':
+        url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={search_query}&with_material_data=true"
+    else:
+        url = f"https://kodikapi.com/list?token={KODIK_TOKEN}&types=anime-serial&limit=15&with_material_data=true&sort=shikimori_rating"
+        
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as resp:
+                data = await resp.json()
+                return web.json_response(data)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
 
-@dp.message_handler(lambda message: message.text == "📅 Расписание")
-async def schedule(message: types.Message):
-    await message.answer("📅 Новые серии выходят ежедневно в Mini App!")
-
-# Функция, которая превращает бота в веб-сервер для Mini App
+# --- РАЗДАЧА ИНТЕРФЕЙСА ---
 async def handle_index(request):
-    # Читаем твой файл index.html и отдаем его пользователю
-    with open('index.html', 'r', encoding='utf-8') as f:
-        html = f.read()
-    return web.Response(text=html, content_type='text/html')
+    if os.path.exists('index.html'):
+        return web.FileResponse('index.html')
+    return web.Response(text="Файл index.html не найден на сервере!", status=404)
 
 async def main():
     app = web.Application()
-    app.router.add_get('/', handle_index) # Главная страница приложения
+    app.router.add_get('/', handle_index)
+    app.router.add_get('/api/anime', proxy_kodik) # Наш секретный мостик
     app.router.add_get('/kodik.txt', lambda r: web.Response(text="kodik2349989754"))
     
     runner = web.AppRunner(app)
     await runner.setup()
-    # Порт 8080 обязателен для Render
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 8080)))
     await site.start()
     
-    # Запускаем бота
+    # Запуск бота. Убедитесь, что бот выключен на ПК!
     await dp.start_polling()
 
 if __name__ == '__main__':
