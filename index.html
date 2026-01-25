@@ -6,85 +6,98 @@
     <title>Zuxa Anime Cinema</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --main-color: #ff4e4e; --bg-color: #0f0f0f; --card-bg: #1a1a1a; }
-        body { background: var(--bg-color); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
-        .header { padding: 20px; text-align: center; background: linear-gradient(to bottom, #1f1f1f, var(--bg-color)); }
-        .logo { font-size: 28px; font-weight: bold; color: var(--main-color); text-transform: uppercase; letter-spacing: 2px; }
+        :root { --main-red: #ff4b4b; --bg-dark: #0f0f0f; --card-bg: #1a1a1a; }
+        body { background: var(--bg-dark); color: white; font-family: 'Roboto', sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
         
-        .search-container { padding: 15px; position: sticky; top: 0; background: var(--bg-color); z-index: 10; }
-        .search-box { width: 100%; padding: 12px; border-radius: 25px; border: none; background: var(--card-bg); color: white; box-sizing: border-box; outline: none; font-size: 16px; border: 1px solid #333; }
+        /* Шапка с логотипом */
+        .header { padding: 20px; text-align: center; background: linear-gradient(to bottom, #222, var(--bg-dark)); }
+        .logo { font-size: 26px; font-weight: 900; color: var(--main-red); text-transform: uppercase; letter-spacing: 3px; margin: 0; }
+        .sub-logo { font-size: 10px; opacity: 0.5; margin-top: 5px; }
 
-        .results { padding: 10px; }
-        .anime-card { background: var(--card-bg); border-radius: 15px; margin-bottom: 20px; overflow: hidden; border: 1px solid #222; }
-        .anime-info { padding: 15px; text-align: left; }
-        .anime-title { font-size: 18px; margin: 0 0 10px 0; color: var(--main-color); }
+        /* Поиск */
+        .search-container { padding: 15px; position: sticky; top: 0; background: var(--bg-dark); z-index: 100; }
+        .search-input { width: 100%; padding: 12px 20px; border-radius: 30px; border: 1px solid #333; background: var(--card-bg); color: white; outline: none; font-size: 16px; box-sizing: border-box; }
+        .search-input:focus { border-color: var(--main-red); }
+
+        /* Сетка аниме */
+        .anime-grid { padding: 10px; display: grid; grid-template-columns: 1fr; gap: 20px; }
+        .anime-card { background: var(--card-bg); border-radius: 15px; overflow: hidden; border: 1px solid #222; transition: 0.3s; }
         
-        .player-container { width: 100%; background: black; position: relative; padding-top: 56.25%; /* 16:9 Aspect Ratio */ }
-        iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+        /* Плеер */
+        .video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; background: #000; }
+        .video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+
+        .info { padding: 15px; }
+        .title { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #eee; }
         
-        .controls { display: flex; justify-content: space-between; padding: 10px 15px; background: #111; }
-        .btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 5px; font-size: 14px; cursor: pointer; transition: 0.3s; }
-        .btn:active { background: var(--main-color); }
+        /* Кнопки управления */
+        .controls { display: flex; gap: 10px; margin-top: 10px; }
+        .btn { flex: 1; padding: 10px; border: none; border-radius: 8px; background: #333; color: white; font-weight: bold; cursor: pointer; }
+        .btn:active { background: var(--main-red); transform: scale(0.98); }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <div class="logo">ZUXA ANIME</div>
-        <p style="font-size: 12px; opacity: 0.6;">Твой личный онлайн-кинотеатр</p>
+        <h1 class="logo">ZUXA ANIME</h1>
+        <div class="sub-logo">PREMIUM CINEMA EXPERIENCE</div>
     </div>
 
     <div class="search-container">
-        <input type="text" id="searchInput" class="search-box" placeholder="Начни писать название аниме..." oninput="debounceSearch()">
+        <input type="text" id="search" class="search-input" placeholder="Поиск аниме..." oninput="searchAnime()">
     </div>
 
-    <div id="results" class="results">
-        </div>
+    <div id="app" class="anime-grid">
+        <div style="text-align: center; opacity: 0.4; margin-top: 50px;">Введите название аниме выше...</div>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
 
-        let searchTimeout;
         const KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2";
+        let timer;
 
-        function debounceSearch() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(searchAnime, 500);
-        }
-
-        async function searchAnime() {
-            const query = document.getElementById('searchInput').value;
+        function searchAnime() {
+            clearTimeout(timer);
+            const query = document.getElementById('search').value;
             if (query.length < 3) return;
 
-            const res = await fetch(https://kodikapi.com/search?token=${KODIK_TOKEN}&title=${encodeURIComponent(query)}&with_material_data=true);
-            const data = await res.json();
-            
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
+            timer = setTimeout(async () => {
+                const response = await fetch(https://kodikapi.com/search?token=${KODIK_TOKEN}&title=${encodeURIComponent(query)}&with_material_data=true);
+                const data = await response.json();
+                renderResults(data.results);
+            }, 600);
+        }
 
-            data.results.forEach(item => {
-                const card = document.createElement('div');
+        function renderResults(results) {
+            const container = document.getElementById('app');
+            container.innerHTML = '';
+
+            if (!results || results.length === 0) {
+                container.innerHTML = '<div style="text-align: center;">Ничего не найдено 😕</div>';
+                return;
+            }
+
+            results.forEach(anime => {
+                let link = anime.link;
+                if (link.startsWith('//')) link = 'https:' + link; // Исправление ссылок
+                            const card = document.createElement('div');
                 card.className = 'anime-card';
-                
-                // Исправляем протокол ссылки, если нужно
-                let videoUrl = item.link;
-                if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
-
-                card.innerHTML = `
-                    <div class="player-container">
-                        <iframe src="${videoUrl}" allowfullscreen></iframe>
+                card.innerHTML = 
+                    <div class="video-wrapper">
+                        <iframe src="${link}" allowfullscreen></iframe>
                     </div>
-                    <div class="anime-info">
-                        <h3 class="anime-title">${item.title}</h3>
+                    <div class="info">
+                        <div class="title">${anime.title}</div>
                         <div class="controls">
-                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">Предыдущая</button>
-                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">Следующая</button>
+                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">⏮ Назад</button>
+                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">Вперед ⏭</button>
                         </div>
                     </div>
-                `;
-                resultsDiv.appendChild(card);
+                ;
+                container.appendChild(card);
             });
         }
     </script>
