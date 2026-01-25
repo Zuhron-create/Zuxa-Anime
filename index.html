@@ -1,1 +1,48 @@
-fetch('/api/anime?type=list')
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zuxa Anime</title>
+    <style>
+        body { background: #000; color: #fff; font-family: sans-serif; margin: 0; padding: 20px; }
+        h1 { color: #ff6600; text-align: center; text-transform: uppercase; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .card { background: #111; border-radius: 8px; overflow: hidden; border: 1px solid #333; }
+        .card img { width: 100%; height: 220px; object-fit: cover; }
+        .card-title { padding: 10px; font-size: 14px; text-align: center; height: 40px; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <h1>ZUXA ANIME</h1>
+    <p>🔥 Популярные новинки</p>
+    <div class="grid" id="anime-list">Загрузка...</div>
+
+    <script>
+        async function loadAnime() {
+            try {
+                // Запрос идет к твоему серверу Vercel, который сам идет в Kodik
+                const response = await fetch('/api/anime?type=list');
+                const data = await response.json();
+                const container = document.getElementById('anime-list');
+                container.innerHTML = '';
+
+                data.results.forEach(anime => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    // Используем данные из material_data, которые мы запросили в main.py
+                    const poster = anime.material_data?.poster_url || 'https://via.placeholder.com/150x220';
+                    card.innerHTML = 
+                        <img src="${poster}" alt="${anime.title}">
+                        <div class="card-title">${anime.title}</div>
+                    ;
+                    container.appendChild(card);
+                });
+            } catch (e) {
+                document.getElementById('anime-list').innerText = 'Ошибка загрузки аниме';
+            }
+        }
+        loadAnime();
+    </script>
+</body>
+</html>
