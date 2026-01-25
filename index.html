@@ -2,42 +2,90 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Zuxa Anime Cinema</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; margin: 0; padding: 10px; text-align: center; }
-        .search-box { width: 90%; padding: 10px; margin-bottom: 20px; border-radius: 5px; border: none; }
-        .anime-card { background: #1a1a1a; margin-bottom: 15px; border-radius: 10px; overflow: hidden; padding-bottom: 10px; }
-        .anime-card img { width: 100%; height: auto; }
-        iframe { width: 100%; height: 250px; border: none; margin-top: 10px; }
-        button { background: #e50914; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        :root { --main-color: #ff4e4e; --bg-color: #0f0f0f; --card-bg: #1a1a1a; }
+        body { background: var(--bg-color); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
+        .header { padding: 20px; text-align: center; background: linear-gradient(to bottom, #1f1f1f, var(--bg-color)); }
+        .logo { font-size: 28px; font-weight: bold; color: var(--main-color); text-transform: uppercase; letter-spacing: 2px; }
+        
+        .search-container { padding: 15px; position: sticky; top: 0; background: var(--bg-color); z-index: 10; }
+        .search-box { width: 100%; padding: 12px; border-radius: 25px; border: none; background: var(--card-bg); color: white; box-sizing: border-box; outline: none; font-size: 16px; border: 1px solid #333; }
+
+        .results { padding: 10px; }
+        .anime-card { background: var(--card-bg); border-radius: 15px; margin-bottom: 20px; overflow: hidden; border: 1px solid #222; }
+        .anime-info { padding: 15px; text-align: left; }
+        .anime-title { font-size: 18px; margin: 0 0 10px 0; color: var(--main-color); }
+        
+        .player-container { width: 100%; background: black; position: relative; padding-top: 56.25%; /* 16:9 Aspect Ratio */ }
+        iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+        
+        .controls { display: flex; justify-content: space-between; padding: 10px 15px; background: #111; }
+        .btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 5px; font-size: 14px; cursor: pointer; transition: 0.3s; }
+        .btn:active { background: var(--main-color); }
     </style>
 </head>
 <body>
-    <h2>🍿 Zuxa Cinema</h2>
-    <input type="text" id="query" class="search-box" placeholder="Название аниме...">
-    <button onclick="searchAnime()">Найти</button>
-    <div id="results"></div>
+
+    <div class="header">
+        <div class="logo">ZUXA ANIME</div>
+        <p style="font-size: 12px; opacity: 0.6;">Твой личный онлайн-кинотеатр</p>
+    </div>
+
+    <div class="search-container">
+        <input type="text" id="searchInput" class="search-box" placeholder="Начни писать название аниме..." oninput="debounceSearch()">
+    </div>
+
+    <div id="results" class="results">
+        </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на весь экран
+        tg.expand();
+        tg.ready();
+
+        let searchTimeout;
+        const KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2";
+
+        function debounceSearch() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(searchAnime, 500);
+        }
 
         async function searchAnime() {
-            const q = document.getElementById('query').value;
-            const res = await fetch(https://kodikapi.com/search?token=388702680a73bae2d95a7ef5b7b013f2&title=${q}&with_material_data=true);
+            const query = document.getElementById('searchInput').value;
+            if (query.length < 3) return;
+
+            const res = await fetch(https://kodikapi.com/search?token=${KODIK_TOKEN}&title=${encodeURIComponent(query)}&with_material_data=true);
             const data = await res.json();
-            let html = '';
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
             data.results.forEach(item => {
-                html += 
-                    <div class="anime-card">
-                        <img src="${item.material_data?.poster_url || ''}">
-                        <h3>${item.title}</h3>
-                        <iframe src="${item.link}" allowfullscreen></iframe>
-                    </div>;
+                const card = document.createElement('div');
+                card.className = 'anime-card';
+                
+                // Исправляем протокол ссылки, если нужно
+                let videoUrl = item.link;
+                if (videoUrl.startsWith('//')) videoUrl = 'https:' + videoUrl;
+
+                card.innerHTML = `
+                    <div class="player-container">
+                        <iframe src="${videoUrl}" allowfullscreen></iframe>
+                    </div>
+                    <div class="anime-info">
+                        <h3 class="anime-title">${item.title}</h3>
+                        <div class="controls">
+                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">Предыдущая</button>
+                            <button class="btn" onclick="tg.HapticFeedback.impactOccurred('light')">Следующая</button>
+                        </div>
+                    </div>
+                `;
+                resultsDiv.appendChild(card);
             });
-            document.getElementById('results').innerHTML = html;
         }
     </script>
 </body>
