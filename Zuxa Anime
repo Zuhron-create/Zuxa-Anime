@@ -6,53 +6,44 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- НАСТРОЙКИ ---
-API_TOKEN = os.getenv("BOT_TOKEN")
+# Если Render снова напишет "Token is invalid", замени os.getenv("BOT_TOKEN") 
+# на свой токен в кавычках прямо здесь, например: API_TOKEN = "твой_токен"
+API_TOKEN = os.getenv("BOT_TOKEN") 
 KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2"
 KODIK_CONFIRM_TEXT = "kodik2349989754"
 
 bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp = Dispatcher(bot)
 
-# --- ГЛАВНОЕ МЕНЮ ---
+# --- ГЛАВНОЕ МЕНЮ (КНОПКИ) ---
 def main_menu():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    # Кнопка в обычном меню
     keyboard.row(KeyboardButton("🔍 Найти аниме"))
     keyboard.row(KeyboardButton("👤 Профиль"), KeyboardButton("📅 Расписание"))
     keyboard.row(KeyboardButton("ℹ️ О проекте"))
     return keyboard
 
-# Эндпоинт для подтверждения Kodik
+# Эндпоинт для подтверждения Kodik (чтобы файл kodik.txt работал)
 async def handle_kodik_confirm(request):
     return web.Response(text=KODIK_CONFIRM_TEXT)
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    # Создаем инлайн-кнопку, которая сама пишет @ZuxaAnime_bot
-    inline_kb = InlineKeyboardMarkup()
-    inline_kb.add(InlineKeyboardButton(
-        text="🚀 ОТКРЫТЬ ПОИСК", 
-        switch_inline_query_current_chat="" # Это вставит имя бота автоматически
-    ))
-
-    await message.reply(
-        "🍿 <b>Zuxa Anime</b> приветствует тебя!\n\n"
-        "Нажми на кнопку ниже, чтобы начать поиск аниме. "
-        "Имя бота вставится автоматически!",
+    await message.answer(
+        "👋 <b>Zuxa Anime</b> запущен!\n\n"
+        "Для поиска нажми на кнопку ниже или просто напиши в любом чате: <code>@ZuxaAnime_bot Наруто</code>",
         reply_markup=main_menu()
     )
-    # Отправляем инлайн кнопку для быстрого старта
-    await message.answer("Нажми сюда для быстрого поиска:", reply_markup=inline_kb)
 
-# Обработка кнопки "🔍 Найти аниме" из меню
+# Исправленная кнопка поиска с АВТОЗАПОЛНЕНИЕМ
 @dp.message_handler(lambda message: message.text == "🔍 Найти аниме")
-async def search_button_handler(message: types.Message):
+async def search_hint(message: types.Message):
     inline_kb = InlineKeyboardMarkup()
     inline_kb.add(InlineKeyboardButton(
-        text="🔎 Начать поиск", 
-        switch_inline_query_current_chat="" # Авто-подстановка имени бота
+        text="🚀 Начать поиск (автозаполнение)", 
+        switch_inline_query_current_chat="" # Это само вставит @ZuxaAnime_bot
     ))
-    await message.answer("Нажми на кнопку ниже, чтобы найти любимое аниме:", reply_markup=inline_kb)
+    await message.answer("Нажми на кнопку для быстрого поиска:", reply_markup=inline_kb)
 
 @dp.message_handler(lambda message: message.text == "👤 Профиль")
 async def profile(message: types.Message):
@@ -60,17 +51,17 @@ async def profile(message: types.Message):
 
 @dp.message_handler(lambda message: message.text == "📅 Расписание")
 async def schedule(message: types.Message):
-    await message.answer("📅 <b>Расписание:</b> Новые серии выходят ежедневно! Проверяйте через поиск.")
+    await message.answer("📅 <b>Расписание:</b> Новые серии каждый день! Ищи через поиск.")
 
 @dp.message_handler(lambda message: message.text == "ℹ️ О проекте")
 async def about(message: types.Message):
-    await message.answer("🎬 <b>Zuxa Anime</b> — лучший бот для просмотра аниме онлайн.")
+    await message.answer("🎬 <b>Zuxa Anime</b> — твой проводник в мир аниме.")
 
-# --- ИНЛАЙН ПОИСК И ОТПРАВКА ВИДЕО ---
+# --- ИНЛАЙН ПОИСК И ОТПРАВКА ВИДЕО (HTML режим) ---
 @dp.inline_handler()
 async def inline_search(inline_query: types.InlineQuery):
     query = inline_query.query or "Наруто"
-    url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={query}&limit=15&with_material_data=true"
+    url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={query}&limit=10&with_material_data=true"
     
     results = []
     async with aiohttp.ClientSession() as session:
@@ -81,42 +72,38 @@ async def inline_search(inline_query: types.InlineQuery):
                     m_data = item.get("material_data", {})
                     title = item.get('title', 'Без названия')
                     link = item.get('link')
-                    poster = m_data.get("poster_url", "https://via.placeholder.com/400x600.png?text=No+Poster")
+                    poster = m_data.get("poster_url", "https://via.placeholder.com/150")
                     
-                    # Кнопка под видео
+                    # Кнопка под сообщением для открытия плеера в чате
                     markup = InlineKeyboardMarkup()
-                    markup.add(InlineKeyboardButton(text="▶️ СМОТРЕТЬ ОНЛАЙН", url=link))
+                    markup.add(InlineKeyboardButton(text="🍿 СМОТРЕТЬ", url=link))
 
                     results.append(types.InlineQueryResultArticle(
                         id=str(i),
-title=title,
-                        description=f"⭐ Рейтинг: {m_data.get('shikimori_rating', '—')}",
+                        title=title,
+                        description=f"Смотреть: {title}",
                         thumb_url=poster,
                         input_message_content=types.InputTextMessageContent(
-                            message_text=(
-                                f"🎬 <b>{title}</b>\n\n"
-                                f"⭐ Рейтинг: {m_data.get('shikimori_rating', '—')}\n"
-                                f"🎭 Жанры: {', '.join(m_data.get('anime_genres', ['Не указаны']))}\n\n"
-                                f"🍿 <b>Приятного просмотра!</b>"
-                            ),
-                            parse_mode="HTML",
-                            disable_web_page_preview=False 
+                            message_text=f"🎬 <b>{title}</b>\n\n🍿 Приятного просмотра!",
+parse_mode="HTML",
+                            disable_web_page_preview=False # ВКЛЮЧАЕТ плеер прямо в чате
                         ),
                         reply_markup=markup
                     ))
-    
+
     await bot.answer_inline_query(inline_query.id, results=results, cache_time=1)
 
-# --- ЗАПУСК ---
+# --- ЗАПУСК ВЕБ-СЕРВЕРА И БОТА ---
 async def main():
     app = web.Application()
     app.router.add_get('/kodik.txt', handle_kodik_confirm)
+    
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    
+
     try:
         await dp.start_polling()
     finally:
