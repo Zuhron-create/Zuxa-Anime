@@ -1,98 +1,66 @@
 import os
 import asyncio
-import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
-# Токен берется из настроек Render (Environment Variables)
+# Берем токен из настроек Render
 API_TOKEN = os.getenv("BOT_TOKEN")
-KODIK_TOKEN = "388702680a73bae2d95a7ef5b7b013f2"
-KODIK_CONFIRM_TEXT = "kodik2349989754"
+# URL твоего сервиса на Render (например, https://zuxa-anime.onrender.com)
+# Мы получим его на следующем шаге
+APP_URL = os.getenv("APP_URL") 
 
 bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp = Dispatcher(bot)
 
-# --- ГЛАВНОЕ МЕНЮ ---
+# Главное меню с большой кнопкой Mini App
 def main_menu():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(KeyboardButton("🔍 Поиск"))
+    # Это самая важная кнопка — она открывает Mini App
+    keyboard.add(KeyboardButton(
+        text="🎬 ОТКРЫТЬ КИНОТЕАТР", 
+        web_app=WebAppInfo(url=APP_URL) if APP_URL else WebAppInfo(url="https://google.com")
+    ))
     keyboard.row(KeyboardButton("👤 Профиль"), KeyboardButton("📅 Расписание"))
     return keyboard
 
 @dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
+async def start(message: types.Message):
     await message.answer(
-        "👋 <b>Zuxa Anime</b> запущен!\n\nИспользуй меню ниже, чтобы найти аниме и смотреть его прямо в Telegram.",
+        "🍿 <b>Добро пожаловать в Zuxa Cinema!</b>\n\n"
+        "Теперь наше аниме доступно в виде полноценного приложения прямо внутри Telegram.\n\n"
+        "Нажми на кнопку ниже, чтобы войти 👇",
         reply_markup=main_menu()
     )
 
-# --- ОБРАБОТКА КНОПОК МЕНЮ ---
-@dp.message_handler(lambda message: message.text == "🔍 Поиск")
-async def search_button(message: types.Message):
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton(
-        text="🚀 Нажать для поиска", 
-        switch_inline_query_current_chat="" 
-    ))
-    await message.answer("Нажми на кнопку, чтобы активировать поиск:", reply_markup=markup)
-
+# Обработка остальных кнопок для порядка
 @dp.message_handler(lambda message: message.text == "👤 Профиль")
-async def profile_handler(message: types.Message):
-    await message.answer(f"👤 <b>Ваш профиль:</b>\nИмя: {message.from_user.first_name}\nID: <code>{message.from_user.id}</code>")
+async def profile(message: types.Message):
+    await message.answer(f"👤 Профиль: <b>{message.from_user.first_name}</b>")
 
 @dp.message_handler(lambda message: message.text == "📅 Расписание")
-async def schedule_handler(message: types.Message):
-    await message.answer("📅 <b>Расписание:</b>\nНовые серии добавляются сразу после выхода озвучки!")
+async def schedule(message: types.Message):
+    await message.answer("📅 Новые серии выходят ежедневно в Mini App!")
 
-# --- ИНЛАЙН ПОИСК (Видео прямо в чате) ---
-@dp.inline_handler()
-async def inline_search(inline_query: types.InlineQuery):
-    query = inline_query.query or "Наруто"
-    url = f"https://kodikapi.com/search?token={KODIK_TOKEN}&title={query}&limit=10&with_material_data=true"
-    
-    results = []
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                for i, item in enumerate(data.get("results", [])):
-                    title = item.get('title', 'Без названия')
-                    link = item.get('link', '')
-                    
-                    # Исправляем формат ссылки для плеера
-                    if link.startswith('//'):
-                        link = 'https:' + link
-                    
-                    if not link.startswith('http'): continue
+# Функция, которая превращает бота в веб-сервер для Mini App
+async def handle_index(request):
+    # Читаем твой файл index.html и отдаем его пользователю
+    with open('index.html', 'r', encoding='utf-8') as f:
+        html = f.read()
+    return web.Response(text=html, content_type='text/html')
 
-                    poster = item.get("material_data", {}).get("poster_url", "https://via.placeholder.com/150")
-
-                    results.append(types.InlineQueryResultArticle(
-                        id=str(i),
-                        title=title,
-                        thumb_url=poster,
-                        description="Нажми, чтобы смотреть прямо в чате",
-                        input_message_content=types.InputTextMessageContent(
-                            # Фокус: пустая ссылка-невидимка заставляет Telegram показать плеер над текстом
-                            message_text=f"<a href='{link}'>⠀</a>🎬 <b>{title}</b>\n\n🍿 Видео подгрузится выше. Нажми 'Play'!",
-                            parse_mode="HTML",
-                            disable_web_page_preview=False # Это включает плеер в чате
-                        )
-                    ))
-    await bot.answer_inline_query(inline_query.id, results=results, cache_time=1)
-
-# --- ЗАПУСК ---
 async def main():
-    # Веб-сервер для порта Render
     app = web.Application()
-app.router.add_get('/kodik.txt', lambda r: web.Response(text=KODIK_CONFIRM_TEXT))
+    app.router.add_get('/', handle_index) # Главная страница приложения
+    app.router.add_get('/kodik.txt', lambda r: web.Response(text="kodik2349989754"))
+    
     runner = web.AppRunner(app)
     await runner.setup()
+    # Порт 8080 обязателен для Render
     site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 8080)))
     await site.start()
     
-    # Запуск бота (убедись, что Webhook удален!)
+    # Запускаем бота
     await dp.start_polling()
 
 if __name__ == '__main__':
